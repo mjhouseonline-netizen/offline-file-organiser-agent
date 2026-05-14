@@ -127,6 +127,7 @@ class MovePlan:
     target: str
     category: str
     reason: str
+    item_type: str = "file"
     status: str = "Ready"
 
 
@@ -270,35 +271,69 @@ def is_relative_to(path, parent):
         return False
 
 
-def build_plan(source_dir, dest_dir, instructions):
+def should_include_folders(instructions, include_folders):
+    text = instructions.lower()
+    return include_folders or any(
+        phrase in text
+        for phrase in (
+            "include folders",
+            "sort folders",
+            "organise folders",
+            "organize folders",
+            "course folders",
+            "folder library",
+        )
+    )
+
+
+def category_for_folder(path, custom_categories):
+    name = path.name.replace("_", " ")
+    name_tokens = tokenize(name)
+    for category, keywords in custom_categories.items():
+        if name_tokens & keywords:
+            return category, f"Matched folder name to {category}"
+    return safe_folder_name(name), "Preserved top-level folder as its own category"
+
+
+def build_plan(source_dir, dest_dir, instructions, include_folders=False):
     source_dir = Path(source_dir).resolve()
     dest_dir = Path(dest_dir).resolve()
     mode, custom_categories, ignored = parse_instruction_profile(instructions)
+    include_folders = should_include_folders(instructions, include_folders)
     plans = []
 
     for path in sorted(source_dir.iterdir(), key=lambda p: p.name.lower()):
-        if not path.is_file():
-            continue
         if path.name.lower() in PROTECTED_NAMES:
             continue
         if is_relative_to(path, dest_dir):
             continue
         if tokenize(path.name) & ignored:
             continue
-
-        if mode == "date":
-            category, reason = category_by_date(path)
-        elif mode == "project":
-            category, reason = category_by_project(path, custom_categories)
+        if path.is_dir():
+            if not include_folders:
+                continue
+            category, reason = category_for_folder(path, custom_categories)
+            item_type = "folder"
+        elif path.is_file():
+            item_type = "file"
+            if mode == "date":
+                category, reason = category_by_date(path)
+            elif mode == "project":
+                category, reason = category_by_project(path, custom_categories)
+            else:
+                category, reason = category_by_type(path, custom_categories)
         else:
-            category, reason = category_by_type(path, custom_categories)
+            continue
 
         category = safe_folder_name(category)
-        target_dir = dest_dir / category
-        target = unique_target(target_dir / path.name)
+        if item_type == "folder" and reason.startswith("Preserved top-level folder"):
+            target = unique_target(dest_dir / category)
+        else:
+            target_dir = dest_dir / category
+            target = unique_target(target_dir / path.name)
         if path.resolve() == target.resolve():
             continue
-        plans.append(MovePlan(str(path), str(target), category, reason))
+        plans.append(MovePlan(str(path), str(target), category, reason, item_type))
 
     return plans
 
@@ -316,9 +351,10 @@ class FileOrganiserApp(tk.Tk):
         self.source_var = tk.StringVar(value=str(desktop_path()))
         self.dest_var = tk.StringVar(value=str(desktop_path() / "Sorted Files"))
         self.status_var = tk.StringVar(value="Ready. Preview the plan before sorting.")
-        self.count_var = tk.StringVar(value="0 files")
+        self.count_var = tk.StringVar(value="0 items")
         self.folder_var = tk.StringVar(value="0 folders")
         self.safety_var = tk.StringVar(value="Preview mode")
+        self.include_folders_var = tk.BooleanVar(value=False)
 
         self._build_styles()
         self._build_ui()
@@ -453,7 +489,8 @@ class FileOrganiserApp(tk.Tk):
             "client alpha project files -> Client Alpha\n"
             "folders: Finance, Photos, Work\n"
             "ignore: shortcuts temp drafts\n"
-            "Sort by type, month, date, or project"
+            "Sort by type, month, date, or project\n"
+            "For course libraries, turn on folder mode."
         )
         tk.Label(left, text=help_text, bg=C["surface"], fg=C["muted"],
                  justify="left", font=FONT_SMALL).grid(row=2, column=0, sticky="w",
@@ -463,10 +500,24 @@ class FileOrganiserApp(tk.Tk):
         action_row.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 14))
         action_row.grid_columnconfigure(0, weight=1)
         action_row.grid_columnconfigure(1, weight=1)
+        folder_toggle = tk.Checkbutton(
+            action_row,
+            text="Include top-level folders",
+            variable=self.include_folders_var,
+            bg=C["surface"],
+            fg=C["muted2"],
+            activebackground=C["surface"],
+            activeforeground=C["text"],
+            selectcolor=C["card2"],
+            font=FONT_SMALL,
+            relief="flat",
+            cursor="hand2",
+        )
+        folder_toggle.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
         self._button(action_row, "Preview", self.preview, C["cyan"]).grid(
-            row=0, column=0, sticky="ew", padx=(0, 8))
+            row=1, column=0, sticky="ew", padx=(0, 8))
         self.sort_button = self._button(action_row, "Sort Files", self.sort_files, C["gold2"])
-        self.sort_button.grid(row=0, column=1, sticky="ew")
+        self.sort_button.grid(row=1, column=1, sticky="ew")
 
         right = self._panel(main, row=0, column=1, sticky="nsew")
         right.grid_columnconfigure(0, weight=1)
@@ -516,7 +567,7 @@ class FileOrganiserApp(tk.Tk):
 
     def update_stats(self):
         folders = {plan.category for plan in self.plans}
-        self.count_var.set(f"{len(self.plans)} files")
+        self.count_var.set(f"{len(self.plans)} items")
         self.folder_var.set(f"{len(folders)} folders")
         if any(plan.status.startswith("Error") for plan in self.plans):
             self.safety_var.set("Check errors")
@@ -545,13 +596,18 @@ class FileOrganiserApp(tk.Tk):
                 self.source_var.get(),
                 self.dest_var.get(),
                 self.instructions.get("1.0", "end").strip(),
+                self.include_folders_var.get(),
             )
         except Exception as exc:
             messagebox.showerror(APP_NAME, f"Could not build plan:\n{exc}")
             return
         self.render_plan()
         self.update_stats()
-        self.status_var.set(f"Preview ready: {len(self.plans)} file(s) will be moved. Nothing has changed yet.")
+        files = sum(1 for plan in self.plans if plan.item_type == "file")
+        folders = sum(1 for plan in self.plans if plan.item_type == "folder")
+        self.status_var.set(
+            f"Preview ready: {files} file(s), {folders} folder(s) will be moved. Nothing has changed yet."
+        )
 
     def render_plan(self):
         for item in self.tree.get_children():
@@ -578,8 +634,8 @@ class FileOrganiserApp(tk.Tk):
             return
         answer = messagebox.askyesno(
             APP_NAME,
-            "Move the planned files now?\n\n"
-            "This app only moves files into folders. It does not delete files or overwrite existing files.",
+            "Move the planned items now?\n\n"
+            "This app only moves files and folders. It does not delete items or overwrite existing items.",
         )
         if not answer:
             return
@@ -599,7 +655,7 @@ class FileOrganiserApp(tk.Tk):
             target = unique_target(Path(plan.target))
             try:
                 target.parent.mkdir(parents=True, exist_ok=True)
-                if source.exists() and source.is_file():
+                if source.exists() and (source.is_file() or source.is_dir()):
                     shutil.move(str(source), str(target))
                     plan.target = str(target)
                     plan.status = "Moved"
@@ -633,8 +689,8 @@ class FileOrganiserApp(tk.Tk):
         self.sort_button.configure(state="normal")
         self.render_plan()
         self.update_stats()
-        self.status_var.set(f"Done. Moved {moved_count} file(s). Undo log: {manifest_path}")
-        messagebox.showinfo(APP_NAME, f"Sorting complete.\n\nMoved {moved_count} file(s).\n\nUndo log saved at:\n{manifest_path}")
+        self.status_var.set(f"Done. Moved {moved_count} item(s). Undo log: {manifest_path}")
+        messagebox.showinfo(APP_NAME, f"Sorting complete.\n\nMoved {moved_count} item(s).\n\nUndo log saved at:\n{manifest_path}")
 
     def undo_last_sort(self):
         manifest = self.last_manifest
@@ -666,12 +722,12 @@ class FileOrganiserApp(tk.Tk):
         for move in moves:
             current = Path(move["target"])
             original = unique_target(Path(move["source"]))
-            if current.exists() and current.is_file():
+            if current.exists() and (current.is_file() or current.is_dir()):
                 original.parent.mkdir(parents=True, exist_ok=True)
                 shutil.move(str(current), str(original))
                 restored += 1
-        self.status_var.set(f"Undo complete. Restored {restored} file(s).")
-        messagebox.showinfo(APP_NAME, f"Undo complete.\n\nRestored {restored} file(s).")
+        self.status_var.set(f"Undo complete. Restored {restored} item(s).")
+        messagebox.showinfo(APP_NAME, f"Undo complete.\n\nRestored {restored} item(s).")
 
 
 def main():

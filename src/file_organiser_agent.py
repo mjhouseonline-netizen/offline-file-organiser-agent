@@ -4,8 +4,10 @@ import re
 import shutil
 import threading
 import tkinter as tk
+import hashlib
 from dataclasses import dataclass, asdict
 from datetime import datetime
+from collections import defaultdict
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -132,6 +134,7 @@ class MovePlan:
     category: str
     reason: str
     item_type: str = "file"
+    duplicate_group: str = ""
     status: str = "Ready"
 
 
@@ -147,6 +150,55 @@ def safe_folder_name(name):
 
 def tokenize(text):
     return set(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def duplicate_name_key(path):
+    stem = path.stem.lower()
+    stem = re.sub(r"\s*[-_ ]?copy\s*$", "", stem)
+    stem = re.sub(r"\s*\(\d+\)\s*$", "", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+    return f"{stem}{path.suffix.lower()}"
+
+
+def file_hash(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def flag_duplicate_plans(plans):
+    candidates = defaultdict(list)
+    for plan in plans:
+        if plan.item_type != "file":
+            continue
+        path = Path(plan.source)
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        candidates[(duplicate_name_key(path), size)].append(plan)
+
+    group_number = 1
+    for group in candidates.values():
+        if len(group) < 2:
+            continue
+        by_hash = defaultdict(list)
+        for plan in group:
+            try:
+                by_hash[file_hash(Path(plan.source))].append(plan)
+            except OSError:
+                continue
+        for exact_group in by_hash.values():
+            if len(exact_group) < 2:
+                continue
+            label = f"DUP-{group_number:03d}"
+            for plan in exact_group:
+                plan.duplicate_group = label
+                plan.reason = f"{plan.reason}; duplicate flagged {label}"
+                plan.status = f"Duplicate {label}"
+            group_number += 1
 
 
 def parse_instruction_profile(instructions):
@@ -412,6 +464,7 @@ class FileOrganiserApp(tk.Tk):
         self.count_var = tk.StringVar(value="0 items")
         self.folder_var = tk.StringVar(value="0 folders")
         self.safety_var = tk.StringVar(value="Preview mode")
+        self.duplicate_var = tk.StringVar(value="0 groups")
         self.include_folders_var = tk.BooleanVar(value=False)
         self.include_subfolder_files_var = tk.BooleanVar(value=False)
 
@@ -502,9 +555,11 @@ class FileOrganiserApp(tk.Tk):
         stats.grid_columnconfigure(0, weight=1)
         stats.grid_columnconfigure(1, weight=1)
         stats.grid_columnconfigure(2, weight=1)
+        stats.grid_columnconfigure(3, weight=1)
         self._stat_card(stats, "Planned Moves", self.count_var, C["gold"], 0)
         self._stat_card(stats, "Target Folders", self.folder_var, C["gold2"], 1)
-        self._stat_card(stats, "Safety State", self.safety_var, C["gold"], 2)
+        self._stat_card(stats, "Duplicates", self.duplicate_var, C["gold"], 2)
+        self._stat_card(stats, "Safety State", self.safety_var, C["gold2"], 3)
 
         controls = self._panel(self, row=3, column=0, sticky="ew", padx=24, pady=(0, 14))
         controls.grid_columnconfigure(1, weight=1)
@@ -621,6 +676,7 @@ class FileOrganiserApp(tk.Tk):
         self.tree.tag_configure("even", background=C["surface2"])
         self.tree.tag_configure("moved", foreground=C["gold"])
         self.tree.tag_configure("error", foreground=C["red"])
+        self.tree.tag_configure("duplicate", foreground=C["red"])
         self.tree.tag_configure("ready", foreground=C["text"])
 
         scroll = ttk.Scrollbar(right, orient="vertical", command=self.tree.yview)
@@ -640,12 +696,16 @@ class FileOrganiserApp(tk.Tk):
 
     def update_stats(self):
         folders = {plan.category for plan in self.plans}
+        duplicate_groups = {plan.duplicate_group for plan in self.plans if plan.duplicate_group}
         self.count_var.set(f"{len(self.plans)} items")
         self.folder_var.set(f"{len(folders)} folders")
+        self.duplicate_var.set(f"{len(duplicate_groups)} groups")
         if any(plan.status.startswith("Error") for plan in self.plans):
             self.safety_var.set("Check errors")
         elif any(plan.status == "Moved" for plan in self.plans):
             self.safety_var.set("Undo log ready")
+        elif duplicate_groups:
+            self.safety_var.set("Review duplicates")
         else:
             self.safety_var.set("Preview mode")
 
@@ -680,6 +740,7 @@ class FileOrganiserApp(tk.Tk):
                 self.include_folders_var.get(),
                 self.include_subfolder_files_var.get(),
             )
+            flag_duplicate_plans(self.plans)
         except Exception as exc:
             messagebox.showerror(APP_NAME, f"Could not build plan:\n{exc}")
             return
@@ -687,8 +748,9 @@ class FileOrganiserApp(tk.Tk):
         self.update_stats()
         files = sum(1 for plan in self.plans if plan.item_type == "file")
         folders = sum(1 for plan in self.plans if plan.item_type == "folder")
+        duplicate_groups = {plan.duplicate_group for plan in self.plans if plan.duplicate_group}
         self.status_var.set(
-            f"Preview ready: {files} file(s), {folders} folder(s) will be moved. Nothing has changed yet."
+            f"Preview ready: {files} file(s), {folders} folder(s), {len(duplicate_groups)} duplicate group(s). Nothing has changed yet."
         )
 
     def render_plan(self):
@@ -700,6 +762,8 @@ class FileOrganiserApp(tk.Tk):
                 status_tag = "moved"
             elif plan.status.startswith("Error"):
                 status_tag = "error"
+            elif plan.duplicate_group:
+                status_tag = "duplicate"
             self.tree.insert("", "end", values=(
                 Path(plan.source).name,
                 plan.category,

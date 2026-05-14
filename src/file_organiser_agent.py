@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 
 
 APP_NAME = "Offline File Organiser Agent"
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 
 
 C = {
@@ -35,7 +35,7 @@ C = {
     "white": "#ffffff",
 }
 
-FONT_TITLE = ("Courier", 25, "bold")
+FONT_TITLE = ("Courier", 34, "bold")
 FONT_SUBTITLE = ("Courier", 11)
 FONT_HEAD = ("Courier", 13, "bold")
 FONT_BODY = ("Courier", 10)
@@ -339,35 +339,43 @@ class FileOrganiserApp(tk.Tk):
                         highlightthickness=1)
 
     def _stat_card(self, parent, title, variable, accent, column):
-        card = tk.Frame(parent, bg=C["card"], highlightbackground=C["border"],
+        card = tk.Frame(parent, bg=C["surface2"], highlightbackground=C["border2"],
                         highlightthickness=1)
         card.grid(row=0, column=column, sticky="ew", padx=(0, 10))
-        tk.Label(card, text=title, bg=C["card"], fg=C["muted"], font=FONT_SMALL).grid(
-            row=0, column=0, sticky="w", padx=12, pady=(10, 0))
-        tk.Label(card, textvariable=variable, bg=C["card"], fg=accent, font=FONT_STAT).grid(
-            row=1, column=0, sticky="w", padx=12, pady=(0, 10))
+        tk.Frame(card, bg=accent, height=4).grid(row=0, column=0, sticky="ew")
+        tk.Label(card, text=title, bg=C["surface2"], fg=C["muted2"], font=FONT_SMALL).grid(
+            row=1, column=0, sticky="w", padx=12, pady=(10, 0))
+        tk.Label(card, textvariable=variable, bg=C["surface2"], fg=accent, font=FONT_STAT).grid(
+            row=2, column=0, sticky="w", padx=12, pady=(0, 12))
         return card
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(4, weight=1)
 
-        header = tk.Frame(self, bg=C["bg"])
-        header.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 10))
+        accent_bar = tk.Frame(self, bg=C["cyan"], height=5)
+        accent_bar.grid(row=0, column=0, sticky="ew")
+
+        header = tk.Frame(self, bg=C["bg2"], highlightbackground=C["border"],
+                          highlightthickness=1)
+        header.grid(row=1, column=0, sticky="ew", padx=24, pady=(18, 14))
         header.grid_columnconfigure(0, weight=1)
         header.grid_columnconfigure(1, weight=0)
 
-        tk.Label(header, text=APP_NAME.upper(), bg=C["bg"], fg=C["cyan"],
-                 font=FONT_TITLE).grid(row=0, column=0, sticky="w")
-        tk.Label(header, text="One offline agent. One job: sort files. Never delete.",
-                 bg=C["bg"], fg=C["muted2"], font=FONT_SUBTITLE).grid(row=1, column=0, sticky="w")
-        badge = tk.Label(header, text="OFFLINE / MOVE ONLY", bg=C["card"], fg=C["green"],
-                         font=FONT_SMALL, padx=12, pady=7,
-                         highlightbackground=C["border2"], highlightthickness=1)
-        badge.grid(row=0, column=1, rowspan=2, sticky="e", padx=(20, 0))
+        tk.Label(header, text="FILE ORGANISER", bg=C["bg2"], fg=C["cyan"],
+                 font=FONT_TITLE).grid(row=0, column=0, sticky="w", padx=18, pady=(16, 0))
+        tk.Label(header, text=f"{APP_NAME} v{APP_VERSION}  |  Offline desktop cleanup agent",
+                 bg=C["bg2"], fg=C["muted2"], font=FONT_SUBTITLE).grid(
+                     row=1, column=0, sticky="w", padx=20, pady=(0, 18))
+        badge_wrap = tk.Frame(header, bg=C["bg2"])
+        badge_wrap.grid(row=0, column=1, rowspan=2, sticky="e", padx=18)
+        tk.Label(badge_wrap, text="MOVE ONLY", bg=C["green"], fg="#061008",
+                 font=("Courier", 16, "bold"), padx=16, pady=8).grid(row=0, column=0, sticky="e")
+        tk.Label(badge_wrap, text="Never deletes. Never overwrites.",
+                 bg=C["bg2"], fg=C["muted2"], font=FONT_SMALL).grid(row=1, column=0, sticky="e", pady=(8, 0))
 
         stats = tk.Frame(self, bg=C["bg"])
-        stats.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
+        stats.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
         stats.grid_columnconfigure(0, weight=1)
         stats.grid_columnconfigure(1, weight=1)
         stats.grid_columnconfigure(2, weight=1)
@@ -375,7 +383,7 @@ class FileOrganiserApp(tk.Tk):
         self._stat_card(stats, "TARGET FOLDERS", self.folder_var, C["violet"], 1)
         self._stat_card(stats, "SAFETY STATE", self.safety_var, C["green"], 2)
 
-        controls = self._panel(self, row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
+        controls = self._panel(self, row=3, column=0, sticky="ew", padx=24, pady=(0, 14))
         controls.grid_columnconfigure(1, weight=1)
         controls.grid_columnconfigure(3, weight=1)
 
@@ -394,14 +402,14 @@ class FileOrganiserApp(tk.Tk):
             row=1, column=4, sticky="ew", padx=(0, 14), pady=(0, 12))
 
         main = tk.Frame(self, bg=C["bg"])
-        main.grid(row=3, column=0, sticky="nsew", padx=24)
+        main.grid(row=4, column=0, sticky="nsew", padx=24)
         main.grid_columnconfigure(0, weight=0)
         main.grid_columnconfigure(1, weight=1)
         main.grid_rowconfigure(0, weight=1)
 
         left = self._panel(main, row=0, column=0, sticky="ns", padx=(0, 14), pady=0)
         left.grid_rowconfigure(1, weight=1)
-        tk.Label(left, text="INSTRUCTIONS", bg=C["surface"], fg=C["cyan"],
+        tk.Label(left, text="SORTING RULES", bg=C["surface"], fg=C["cyan"],
                  font=FONT_HEAD).grid(row=0, column=0, sticky="w", padx=14, pady=(14, 8))
         self.instructions = tk.Text(left, width=38, height=16, bg=C["bg"], fg=C["text"],
                                     insertbackground=C["cyan"], relief="flat",
@@ -438,7 +446,7 @@ class FileOrganiserApp(tk.Tk):
         plan_header = tk.Frame(right, bg=C["surface"])
         plan_header.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
         plan_header.grid_columnconfigure(0, weight=1)
-        tk.Label(plan_header, text="MOVE PLAN", bg=C["surface"], fg=C["cyan"],
+        tk.Label(plan_header, text="PREVIEW PLAN", bg=C["surface"], fg=C["cyan"],
                  font=FONT_HEAD).grid(row=0, column=0, sticky="w")
         tk.Label(plan_header, text="preview first, then move", bg=C["surface"],
                  fg=C["muted"], font=FONT_SMALL).grid(row=0, column=1, sticky="e")
@@ -467,7 +475,7 @@ class FileOrganiserApp(tk.Tk):
         scroll.grid(row=1, column=1, sticky="ns", pady=(0, 14))
 
         footer = tk.Frame(self, bg=C["bg"])
-        footer.grid(row=4, column=0, sticky="ew", padx=24, pady=18)
+        footer.grid(row=5, column=0, sticky="ew", padx=24, pady=18)
         footer.grid_columnconfigure(0, weight=1)
 
         tk.Label(footer, textvariable=self.status_var, bg=C["bg"], fg=C["muted"],

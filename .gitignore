@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+
+build/
+dist/
+*.spec
+
+.venv/
+venv/
+env/
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+*.log
+tmp-sort-test/

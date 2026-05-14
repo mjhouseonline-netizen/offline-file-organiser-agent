@@ -16,23 +16,32 @@ APP_VERSION = "1.0"
 
 C = {
     "bg": "#080a0f",
+    "bg2": "#0a0f16",
     "surface": "#0d1017",
+    "surface2": "#111925",
     "card": "#0f1520",
+    "card2": "#151e2c",
     "border": "#1a2030",
+    "border2": "#26344a",
     "cyan": "#00e5ff",
+    "blue": "#5aa7ff",
     "green": "#39ff14",
     "amber": "#ffb300",
     "red": "#ff3d5a",
+    "violet": "#b58cff",
     "text": "#e8edf5",
     "muted": "#7d8798",
+    "muted2": "#aab4c3",
     "white": "#ffffff",
 }
 
-FONT_TITLE = ("Courier", 24, "bold")
+FONT_TITLE = ("Courier", 25, "bold")
+FONT_SUBTITLE = ("Courier", 11)
 FONT_HEAD = ("Courier", 13, "bold")
 FONT_BODY = ("Courier", 10)
 FONT_SMALL = ("Courier", 9)
 FONT_MONO = ("Courier", 10)
+FONT_STAT = ("Courier", 18, "bold")
 
 
 CATEGORY_RULES = {
@@ -276,8 +285,8 @@ class FileOrganiserApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_NAME} {APP_VERSION}")
-        self.geometry("1060x720")
-        self.minsize(900, 620)
+        self.geometry("1160x760")
+        self.minsize(980, 660)
         self.configure(bg=C["bg"])
         self.plans = []
         self.last_manifest = None
@@ -285,6 +294,9 @@ class FileOrganiserApp(tk.Tk):
         self.source_var = tk.StringVar(value=str(desktop_path()))
         self.dest_var = tk.StringVar(value=str(desktop_path() / "Sorted Files"))
         self.status_var = tk.StringVar(value="Ready. Preview the plan before sorting.")
+        self.count_var = tk.StringVar(value="0 files")
+        self.folder_var = tk.StringVar(value="0 folders")
+        self.safety_var = tk.StringVar(value="Preview mode")
 
         self._build_styles()
         self._build_ui()
@@ -296,10 +308,12 @@ class FileOrganiserApp(tk.Tk):
         except tk.TclError:
             pass
         style.configure("Treeview", background=C["surface"], foreground=C["text"],
-                        fieldbackground=C["surface"], rowheight=28, borderwidth=0)
-        style.configure("Treeview.Heading", background=C["card"], foreground=C["cyan"],
+                        fieldbackground=C["surface"], rowheight=32, borderwidth=0,
+                        font=FONT_BODY)
+        style.configure("Treeview.Heading", background=C["card2"], foreground=C["cyan"],
                         font=FONT_HEAD, relief="flat")
-        style.map("Treeview", background=[("selected", "#123344")])
+        style.map("Treeview", background=[("selected", "#123344")],
+                  foreground=[("selected", C["white"])])
         style.configure("Horizontal.TProgressbar", background=C["cyan"],
                         troughcolor=C["surface"], bordercolor=C["border"])
 
@@ -310,46 +324,77 @@ class FileOrganiserApp(tk.Tk):
         return frame
 
     def _button(self, parent, text, command, fg=None):
-        return tk.Button(parent, text=text, command=command, bg=C["card"],
-                         fg=fg or C["text"], activebackground="#152335",
-                         activeforeground=C["white"], relief="flat", bd=0,
-                         padx=16, pady=9, font=FONT_HEAD, cursor="hand2")
+        button = tk.Button(parent, text=text, command=command, bg=C["card2"],
+                           fg=fg or C["text"], activebackground="#1b2b40",
+                           activeforeground=C["white"], relief="flat", bd=0,
+                           padx=16, pady=10, font=FONT_HEAD, cursor="hand2")
+        button.bind("<Enter>", lambda _event: button.configure(bg="#1b2b40"))
+        button.bind("<Leave>", lambda _event: button.configure(bg=C["card2"]))
+        return button
+
+    def _entry(self, parent, variable):
+        return tk.Entry(parent, textvariable=variable, bg=C["bg2"], fg=C["text"],
+                        insertbackground=C["cyan"], relief="flat", font=FONT_MONO,
+                        highlightbackground=C["border"], highlightcolor=C["cyan"],
+                        highlightthickness=1)
+
+    def _stat_card(self, parent, title, variable, accent, column):
+        card = tk.Frame(parent, bg=C["card"], highlightbackground=C["border"],
+                        highlightthickness=1)
+        card.grid(row=0, column=column, sticky="ew", padx=(0, 10))
+        tk.Label(card, text=title, bg=C["card"], fg=C["muted"], font=FONT_SMALL).grid(
+            row=0, column=0, sticky="w", padx=12, pady=(10, 0))
+        tk.Label(card, textvariable=variable, bg=C["card"], fg=accent, font=FONT_STAT).grid(
+            row=1, column=0, sticky="w", padx=12, pady=(0, 10))
+        return card
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(3, weight=1)
 
         header = tk.Frame(self, bg=C["bg"])
-        header.grid(row=0, column=0, sticky="ew", padx=22, pady=(20, 12))
+        header.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 10))
         header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(1, weight=0)
 
         tk.Label(header, text=APP_NAME.upper(), bg=C["bg"], fg=C["cyan"],
                  font=FONT_TITLE).grid(row=0, column=0, sticky="w")
         tk.Label(header, text="One offline agent. One job: sort files. Never delete.",
-                 bg=C["bg"], fg=C["muted"], font=FONT_BODY).grid(row=1, column=0, sticky="w")
+                 bg=C["bg"], fg=C["muted2"], font=FONT_SUBTITLE).grid(row=1, column=0, sticky="w")
+        badge = tk.Label(header, text="OFFLINE / MOVE ONLY", bg=C["card"], fg=C["green"],
+                         font=FONT_SMALL, padx=12, pady=7,
+                         highlightbackground=C["border2"], highlightthickness=1)
+        badge.grid(row=0, column=1, rowspan=2, sticky="e", padx=(20, 0))
 
-        controls = self._panel(self, row=1, column=0, sticky="ew", padx=22, pady=(0, 14))
+        stats = tk.Frame(self, bg=C["bg"])
+        stats.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 14))
+        stats.grid_columnconfigure(0, weight=1)
+        stats.grid_columnconfigure(1, weight=1)
+        stats.grid_columnconfigure(2, weight=1)
+        self._stat_card(stats, "PLANNED MOVES", self.count_var, C["cyan"], 0)
+        self._stat_card(stats, "TARGET FOLDERS", self.folder_var, C["violet"], 1)
+        self._stat_card(stats, "SAFETY STATE", self.safety_var, C["green"], 2)
+
+        controls = self._panel(self, row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
         controls.grid_columnconfigure(1, weight=1)
         controls.grid_columnconfigure(3, weight=1)
 
         tk.Label(controls, text="SOURCE", bg=C["surface"], fg=C["muted"],
                  font=FONT_SMALL).grid(row=0, column=0, sticky="w", padx=14, pady=(14, 3))
-        tk.Entry(controls, textvariable=self.source_var, bg=C["bg"], fg=C["text"],
-                 insertbackground=C["cyan"], relief="flat", font=FONT_MONO).grid(
+        self._entry(controls, self.source_var).grid(
                      row=1, column=0, columnspan=2, sticky="ew", padx=(14, 8), pady=(0, 12), ipady=8)
         self._button(controls, "Browse", self.pick_source).grid(
             row=1, column=2, sticky="ew", padx=(0, 14), pady=(0, 12))
 
         tk.Label(controls, text="SORT INTO", bg=C["surface"], fg=C["muted"],
                  font=FONT_SMALL).grid(row=0, column=3, sticky="w", padx=14, pady=(14, 3))
-        tk.Entry(controls, textvariable=self.dest_var, bg=C["bg"], fg=C["text"],
-                 insertbackground=C["cyan"], relief="flat", font=FONT_MONO).grid(
+        self._entry(controls, self.dest_var).grid(
                      row=1, column=3, sticky="ew", padx=(14, 8), pady=(0, 12), ipady=8)
         self._button(controls, "Browse", self.pick_dest).grid(
             row=1, column=4, sticky="ew", padx=(0, 14), pady=(0, 12))
 
         main = tk.Frame(self, bg=C["bg"])
-        main.grid(row=2, column=0, sticky="nsew", padx=22)
+        main.grid(row=3, column=0, sticky="nsew", padx=24)
         main.grid_columnconfigure(0, weight=0)
         main.grid_columnconfigure(1, weight=1)
         main.grid_rowconfigure(0, weight=1)
@@ -360,7 +405,9 @@ class FileOrganiserApp(tk.Tk):
                  font=FONT_HEAD).grid(row=0, column=0, sticky="w", padx=14, pady=(14, 8))
         self.instructions = tk.Text(left, width=38, height=16, bg=C["bg"], fg=C["text"],
                                     insertbackground=C["cyan"], relief="flat",
-                                    wrap="word", font=FONT_BODY, padx=10, pady=10)
+                                    wrap="word", font=FONT_BODY, padx=12, pady=12,
+                                    highlightbackground=C["border"], highlightcolor=C["cyan"],
+                                    highlightthickness=1)
         self.instructions.grid(row=1, column=0, sticky="nsew", padx=14)
         self.instructions.insert("1.0", DEFAULT_INSTRUCTIONS)
 
@@ -388,8 +435,13 @@ class FileOrganiserApp(tk.Tk):
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(1, weight=1)
 
-        tk.Label(right, text="MOVE PLAN", bg=C["surface"], fg=C["cyan"],
-                 font=FONT_HEAD).grid(row=0, column=0, sticky="w", padx=14, pady=(14, 8))
+        plan_header = tk.Frame(right, bg=C["surface"])
+        plan_header.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
+        plan_header.grid_columnconfigure(0, weight=1)
+        tk.Label(plan_header, text="MOVE PLAN", bg=C["surface"], fg=C["cyan"],
+                 font=FONT_HEAD).grid(row=0, column=0, sticky="w")
+        tk.Label(plan_header, text="preview first, then move", bg=C["surface"],
+                 fg=C["muted"], font=FONT_SMALL).grid(row=0, column=1, sticky="e")
 
         cols = ("file", "category", "target", "reason", "status")
         self.tree = ttk.Treeview(right, columns=cols, show="headings", selectmode="browse")
@@ -398,19 +450,24 @@ class FileOrganiserApp(tk.Tk):
         self.tree.heading("target", text="Target")
         self.tree.heading("reason", text="Reason")
         self.tree.heading("status", text="Status")
-        self.tree.column("file", width=190, anchor="w")
-        self.tree.column("category", width=110, anchor="w")
-        self.tree.column("target", width=260, anchor="w")
-        self.tree.column("reason", width=210, anchor="w")
+        self.tree.column("file", width=210, anchor="w")
+        self.tree.column("category", width=120, anchor="w")
+        self.tree.column("target", width=280, anchor="w")
+        self.tree.column("reason", width=230, anchor="w")
         self.tree.column("status", width=90, anchor="w")
         self.tree.grid(row=1, column=0, sticky="nsew", padx=14)
+        self.tree.tag_configure("odd", background=C["surface"])
+        self.tree.tag_configure("even", background=C["surface2"])
+        self.tree.tag_configure("moved", foreground=C["green"])
+        self.tree.tag_configure("error", foreground=C["red"])
+        self.tree.tag_configure("ready", foreground=C["text"])
 
         scroll = ttk.Scrollbar(right, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         scroll.grid(row=1, column=1, sticky="ns", pady=(0, 14))
 
         footer = tk.Frame(self, bg=C["bg"])
-        footer.grid(row=3, column=0, sticky="ew", padx=22, pady=18)
+        footer.grid(row=4, column=0, sticky="ew", padx=24, pady=18)
         footer.grid_columnconfigure(0, weight=1)
 
         tk.Label(footer, textvariable=self.status_var, bg=C["bg"], fg=C["muted"],
@@ -419,6 +476,17 @@ class FileOrganiserApp(tk.Tk):
         self.progress.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         self._button(footer, "Undo Last Sort", self.undo_last_sort, C["amber"]).grid(
             row=0, column=1, rowspan=2, sticky="e", padx=(14, 0))
+
+    def update_stats(self):
+        folders = {plan.category for plan in self.plans}
+        self.count_var.set(f"{len(self.plans)} files")
+        self.folder_var.set(f"{len(folders)} folders")
+        if any(plan.status.startswith("Error") for plan in self.plans):
+            self.safety_var.set("Check errors")
+        elif any(plan.status == "Moved" for plan in self.plans):
+            self.safety_var.set("Undo log ready")
+        else:
+            self.safety_var.set("Preview mode")
 
     def pick_source(self):
         path = filedialog.askdirectory(title="Choose folder to organise",
@@ -445,19 +513,25 @@ class FileOrganiserApp(tk.Tk):
             messagebox.showerror(APP_NAME, f"Could not build plan:\n{exc}")
             return
         self.render_plan()
+        self.update_stats()
         self.status_var.set(f"Preview ready: {len(self.plans)} file(s) will be moved. Nothing has changed yet.")
 
     def render_plan(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
-        for plan in self.plans:
+        for index, plan in enumerate(self.plans):
+            status_tag = "ready"
+            if plan.status == "Moved":
+                status_tag = "moved"
+            elif plan.status.startswith("Error"):
+                status_tag = "error"
             self.tree.insert("", "end", values=(
                 Path(plan.source).name,
                 plan.category,
                 str(Path(plan.target).parent),
                 plan.reason,
                 plan.status,
-            ))
+            ), tags=("even" if index % 2 == 0 else "odd", status_tag))
 
     def sort_files(self):
         if not self.plans:
@@ -515,11 +589,13 @@ class FileOrganiserApp(tk.Tk):
         self.progress["maximum"] = total
         self.progress["value"] = idx
         self.render_plan()
+        self.update_stats()
         self.status_var.set(f"Sorting files: {idx}/{total}")
 
     def _sort_done(self, moved_count, manifest_path):
         self.sort_button.configure(state="normal")
         self.render_plan()
+        self.update_stats()
         self.status_var.set(f"Done. Moved {moved_count} file(s). Undo log: {manifest_path}")
         messagebox.showinfo(APP_NAME, f"Sorting complete.\n\nMoved {moved_count} file(s).\n\nUndo log saved at:\n{manifest_path}")
 

@@ -52,6 +52,20 @@ FONT_STAT = ("Segoe UI Semibold", 18)
 
 
 CATEGORY_RULES = {
+    "Prompts": {
+        "extensions": {".txt", ".md", ".doc", ".docx", ".pdf", ".json"},
+        "keywords": {
+            "prompt", "prompts", "instruction", "instructions", "system",
+            "persona", "command", "cheat", "sheet"
+        },
+    },
+    "GPTs": {
+        "extensions": {".txt", ".md", ".doc", ".docx", ".pdf", ".json"},
+        "keywords": {
+            "gpt", "gpts", "chatgpt", "assistant", "agent", "agents",
+            "bot", "bots", "workspace", "custom"
+        },
+    },
     "Documents": {
         "extensions": {
             ".pdf", ".doc", ".docx", ".txt", ".rtf", ".odt", ".md", ".pages"
@@ -119,10 +133,17 @@ DEFAULT_INSTRUCTIONS = (
     "- Screenshots and screen recordings -> Screenshots\n"
     "- Invoices, receipts, tax, bank, and payment files -> Finance\n"
     "- Resumes, CVs, job applications, and portfolio files -> Career\n"
+    "- Prompt libraries, system instructions, and prompt sheets -> Prompts\n"
+    "- Custom GPTs, assistants, agents, and ChatGPT setup docs -> GPTs\n"
     "- Photos, logos, and image assets -> Images\n"
     "- Installers and setup files -> Installers\n"
     "- Zip, rar, and backup bundles -> Archives\n\n"
-    "Custom folders: Finance, Career, Screenshots, Images, Documents, Installers, Archives, Code, Other\n"
+    "Custom folders: Finance, Career, Prompts, GPTs, Screenshots, Images, Documents, Installers, Archives, Code, Other\n"
+    "Example custom rules:\n"
+    "- all prompts into Prompts\n"
+    "- all gpts into GPTs\n"
+    "- worksheets templates checklists -> Course Resources\n"
+    "- client alpha: proposal contract invoice\n"
     "Ignore: shortcuts, desktop.ini, temporary files"
 )
 
@@ -148,8 +169,32 @@ def safe_folder_name(name):
     return cleaned[:80] or "Other"
 
 
+def clean_rule_folder_name(name):
+    cleaned = re.sub(r"\b(one|a|the|new)\b", " ", name, flags=re.I)
+    cleaned = re.sub(r"\bfolder\b", " ", cleaned, flags=re.I)
+    cleaned = re.sub(r"\ball\b", " ", cleaned, flags=re.I)
+    return safe_folder_name(cleaned)
+
+
 def tokenize(text):
-    return set(re.findall(r"[a-z0-9]+", text.lower()))
+    tokens = set(re.findall(r"[a-z0-9]+", text.lower()))
+    for token in list(tokens):
+        if len(token) > 3 and token.endswith("s"):
+            tokens.add(token[:-1])
+    return tokens
+
+
+def path_tokens(path):
+    bits = [path.stem]
+    bits.extend(part.replace("_", " ") for part in path.parent.parts[-4:])
+    return tokenize(" ".join(bits))
+
+
+def add_custom_rule(custom, folder, words):
+    folder = clean_rule_folder_name(folder)
+    words = {word for word in words if word not in {"all", "into", "to", "the", "a", "one", "folder", "folders"}}
+    if folder and words:
+        custom.setdefault(folder, set()).update(words)
 
 
 def duplicate_name_key(path):
@@ -221,18 +266,26 @@ def parse_instruction_profile(instructions):
                 custom[name] = tokenize(name)
 
     for line in instructions.splitlines():
+        line = line.strip(" -\t")
+        if not line:
+            continue
         if "->" in line:
             left, right = line.split("->", 1)
-            folder = safe_folder_name(right)
-            words = tokenize(left)
-            if folder and words:
-                custom.setdefault(folder, set()).update(words)
+            add_custom_rule(custom, right, tokenize(left))
+            continue
+
+        into_match = re.search(
+            r"^(?:all\s+)?(.+?)\s+(?:into|to|in)\s+(?:their\s+own\s+|one\s+|a\s+|the\s+)?(.+?)$",
+            line,
+            re.I,
+        )
+        if into_match and not line.lower().startswith(("mission", "safety", "default", "course", "ignore")):
+            add_custom_rule(custom, into_match.group(2), tokenize(into_match.group(1)))
+            continue
+
         elif ":" in line and not line.lower().strip().startswith(("mission", "safety", "default", "custom", "ignore")):
             left, right = line.split(":", 1)
-            folder = safe_folder_name(left)
-            words = tokenize(right)
-            if folder and words:
-                custom.setdefault(folder, set()).update(words)
+            add_custom_rule(custom, left, tokenize(right))
 
     for phrase, folder in {
         "invoice": "Finance",
@@ -246,9 +299,19 @@ def parse_instruction_profile(instructions):
         "agreement": "Legal",
         "screenshot": "Screenshots",
         "screen shot": "Screenshots",
+        "prompt": "Prompts",
+        "prompts": "Prompts",
+        "system instruction": "Prompts",
+        "system instructions": "Prompts",
+        "gpt": "GPTs",
+        "gpts": "GPTs",
+        "chatgpt": "GPTs",
+        "custom gpt": "GPTs",
+        "agent": "GPTs",
+        "agents": "GPTs",
     }.items():
         if phrase in text:
-            custom.setdefault(folder, set()).add(phrase.replace(" ", ""))
+            custom.setdefault(folder, set()).update(tokenize(phrase))
 
     ignore_match = re.search(r"(?:ignore|leave|skip)\s*:\s*([^\n.]+)", instructions, re.I)
     if ignore_match:
@@ -259,13 +322,13 @@ def parse_instruction_profile(instructions):
 
 def category_by_type(path, custom_categories):
     ext = path.suffix.lower()
-    name_tokens = tokenize(path.stem)
+    name_tokens = path_tokens(path)
     best_name = "Other"
     best_score = 0
     reason = "No strong match, placed in Other"
 
     for category, keywords in custom_categories.items():
-        score = len(name_tokens & keywords) * 10
+        score = len(name_tokens & keywords) * 15
         if score > best_score:
             best_name = category
             best_score = score
@@ -273,14 +336,18 @@ def category_by_type(path, custom_categories):
 
     for category, rule in CATEGORY_RULES.items():
         score = 0
-        if ext in rule["extensions"]:
+        keyword_hits = name_tokens & rule["keywords"]
+        if ext in rule["extensions"] and category not in {"Prompts", "GPTs"}:
             score += 5
-        score += len(name_tokens & rule["keywords"]) * 2
+        score += len(keyword_hits) * 8
         if score > best_score:
             best_name = category
             best_score = score
             if ext in rule["extensions"]:
-                reason = f"Matched {ext or 'file'} type"
+                if keyword_hits:
+                    reason = f"Matched {ext or 'file'} type and {category} keywords"
+                else:
+                    reason = f"Matched {ext or 'file'} type"
             else:
                 reason = f"Matched name keywords for {category}"
 
@@ -383,7 +450,7 @@ def add_nested_file_plans(source_dir, dest_dir, mode, custom_categories, ignored
             continue
         if should_skip_nested_path(path):
             continue
-        if is_relative_to(path, dest_dir):
+        if dest_dir != source_dir and is_relative_to(path, dest_dir):
             continue
         if tokenize(path.name) & ignored:
             continue
@@ -417,7 +484,7 @@ def build_plan(source_dir, dest_dir, instructions, include_folders=False, includ
     for path in sorted(source_dir.iterdir(), key=lambda p: p.name.lower()):
         if path.name.lower() in PROTECTED_NAMES:
             continue
-        if is_relative_to(path, dest_dir):
+        if dest_dir != source_dir and is_relative_to(path, dest_dir):
             continue
         if tokenize(path.name) & ignored:
             continue
@@ -599,8 +666,10 @@ class FileOrganiserApp(tk.Tk):
 
         help_text = (
             "Rule patterns the agent understands:\n"
-            "Finance, tax, receipts -> Finance\n"
-            "client alpha project files -> Client Alpha\n"
+            "all prompts into Prompts\n"
+            "all gpts into GPTs\n"
+            "worksheets templates -> Course Resources\n"
+            "client alpha: proposal contract invoice\n"
             "folders: Finance, Photos, Work\n"
             "ignore: shortcuts temp drafts\n"
             "Sort by type, month, date, or project\n"

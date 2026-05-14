@@ -109,6 +109,10 @@ DEFAULT_INSTRUCTIONS = (
     "- Move files only. Never delete anything.\n"
     "- Never overwrite an existing file.\n"
     "- Leave folders alone unless I choose them directly.\n\n"
+    "Course library rule:\n"
+    "- For course folders, keep each course folder where it is.\n"
+    "- Sort the files inside each course folder into local folders like Documents, Images, Videos, Archives, Code, and Other.\n"
+    "- Do not pull course files into one big shared destination.\n\n"
     "Default sorting:\n"
     "- Screenshots and screen recordings -> Screenshots\n"
     "- Invoices, receipts, tax, bank, and payment files -> Finance\n"
@@ -295,7 +299,63 @@ def category_for_folder(path, custom_categories):
     return safe_folder_name(name), "Preserved top-level folder as its own category"
 
 
-def build_plan(source_dir, dest_dir, instructions, include_folders=False):
+def should_skip_nested_path(path):
+    return any(part.lower() == "_organiser_logs" for part in path.parts)
+
+
+def classify_file(path, mode, custom_categories):
+    if mode == "date":
+        return category_by_date(path)
+    if mode == "project":
+        return category_by_project(path, custom_categories)
+    return category_by_type(path, custom_categories)
+
+
+def already_inside_category(path, source_dir, category):
+    category_name = safe_folder_name(category).lower()
+    for parent in path.parents:
+        if parent == source_dir:
+            break
+        if safe_folder_name(parent.name).lower() == category_name:
+            return True
+    return False
+
+
+def add_nested_file_plans(source_dir, dest_dir, mode, custom_categories, ignored, plans):
+    for path in sorted(source_dir.rglob("*"), key=lambda p: str(p).lower()):
+        if not path.is_file():
+            continue
+        if path.parent.resolve() == source_dir:
+            continue
+        if path.name.lower() in PROTECTED_NAMES:
+            continue
+        if should_skip_nested_path(path):
+            continue
+        if is_relative_to(path, dest_dir):
+            continue
+        if tokenize(path.name) & ignored:
+            continue
+
+        category, reason = classify_file(path, mode, custom_categories)
+        category = safe_folder_name(category)
+        if already_inside_category(path, source_dir, category):
+            continue
+
+        target = unique_target(path.parent / category / path.name)
+        if path.resolve() == target.resolve():
+            continue
+        plans.append(
+            MovePlan(
+                str(path),
+                str(target),
+                category,
+                f"{reason}; kept inside existing subfolder",
+                "file",
+            )
+        )
+
+
+def build_plan(source_dir, dest_dir, instructions, include_folders=False, include_subfolder_files=False):
     source_dir = Path(source_dir).resolve()
     dest_dir = Path(dest_dir).resolve()
     mode, custom_categories, ignored = parse_instruction_profile(instructions)
@@ -316,12 +376,7 @@ def build_plan(source_dir, dest_dir, instructions, include_folders=False):
             item_type = "folder"
         elif path.is_file():
             item_type = "file"
-            if mode == "date":
-                category, reason = category_by_date(path)
-            elif mode == "project":
-                category, reason = category_by_project(path, custom_categories)
-            else:
-                category, reason = category_by_type(path, custom_categories)
+            category, reason = classify_file(path, mode, custom_categories)
         else:
             continue
 
@@ -334,6 +389,9 @@ def build_plan(source_dir, dest_dir, instructions, include_folders=False):
         if path.resolve() == target.resolve():
             continue
         plans.append(MovePlan(str(path), str(target), category, reason, item_type))
+
+    if include_subfolder_files and not include_folders:
+        add_nested_file_plans(source_dir, dest_dir, mode, custom_categories, ignored, plans)
 
     return plans
 
@@ -355,6 +413,7 @@ class FileOrganiserApp(tk.Tk):
         self.folder_var = tk.StringVar(value="0 folders")
         self.safety_var = tk.StringVar(value="Preview mode")
         self.include_folders_var = tk.BooleanVar(value=False)
+        self.include_subfolder_files_var = tk.BooleanVar(value=False)
 
         self._build_styles()
         self._build_ui()
@@ -490,7 +549,7 @@ class FileOrganiserApp(tk.Tk):
             "folders: Finance, Photos, Work\n"
             "ignore: shortcuts temp drafts\n"
             "Sort by type, month, date, or project\n"
-            "For course libraries, turn on folder mode."
+            "For course libraries, sort inside subfolders."
         )
         tk.Label(left, text=help_text, bg=C["surface"], fg=C["muted"],
                  justify="left", font=FONT_SMALL).grid(row=2, column=0, sticky="w",
@@ -514,10 +573,24 @@ class FileOrganiserApp(tk.Tk):
             cursor="hand2",
         )
         folder_toggle.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        nested_toggle = tk.Checkbutton(
+            action_row,
+            text="Sort files inside subfolders in place",
+            variable=self.include_subfolder_files_var,
+            bg=C["surface"],
+            fg=C["muted2"],
+            activebackground=C["surface"],
+            activeforeground=C["text"],
+            selectcolor=C["card2"],
+            font=FONT_SMALL,
+            relief="flat",
+            cursor="hand2",
+        )
+        nested_toggle.grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 10))
         self._button(action_row, "Preview", self.preview, C["cyan"]).grid(
-            row=1, column=0, sticky="ew", padx=(0, 8))
+            row=2, column=0, sticky="ew", padx=(0, 8))
         self.sort_button = self._button(action_row, "Sort Files", self.sort_files, C["gold2"])
-        self.sort_button.grid(row=1, column=1, sticky="ew")
+        self.sort_button.grid(row=2, column=1, sticky="ew")
 
         right = self._panel(main, row=0, column=1, sticky="nsew")
         right.grid_columnconfigure(0, weight=1)
@@ -591,12 +664,21 @@ class FileOrganiserApp(tk.Tk):
             self.dest_var.set(path)
 
     def preview(self):
+        if self.include_folders_var.get() and self.include_subfolder_files_var.get():
+            messagebox.showinfo(
+                APP_NAME,
+                "Choose one folder mode at a time.\n\n"
+                "Use 'Include top-level folders' to move whole folders.\n"
+                "Use 'Sort files inside subfolders in place' to keep folders where they are and organise their contents.",
+            )
+            return
         try:
             self.plans = build_plan(
                 self.source_var.get(),
                 self.dest_var.get(),
                 self.instructions.get("1.0", "end").strip(),
                 self.include_folders_var.get(),
+                self.include_subfolder_files_var.get(),
             )
         except Exception as exc:
             messagebox.showerror(APP_NAME, f"Could not build plan:\n{exc}")

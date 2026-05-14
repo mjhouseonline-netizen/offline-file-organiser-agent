@@ -16,25 +16,27 @@ APP_VERSION = "1.1"
 
 C = {
     "bg": "#050505",
-    "bg2": "#0b070a",
-    "surface": "#111012",
-    "surface2": "#181216",
-    "card": "#171114",
-    "card2": "#21171c",
-    "border": "#3a2a20",
-    "border2": "#6e4f23",
-    "cyan": "#f5c542",
-    "blue": "#e56aa6",
-    "green": "#f5c542",
-    "amber": "#f5c542",
-    "red": "#ff5f7d",
-    "violet": "#ff7ac8",
-    "text": "#f6efe4",
-    "muted": "#9b8791",
-    "muted2": "#d2bfa2",
+    "bg2": "#0a0a08",
+    "surface": "#12110e",
+    "surface2": "#1a1813",
+    "card": "#171510",
+    "card2": "#211d14",
+    "border": "#3b3322",
+    "border2": "#8b6d35",
+    "cyan": "#c99b45",
+    "blue": "#b88739",
+    "green": "#d4aa5a",
+    "amber": "#c99b45",
+    "red": "#d46a6a",
+    "violet": "#b98a3c",
+    "text": "#f4efe5",
+    "muted": "#8f8472",
+    "muted2": "#c8b58f",
     "white": "#ffffff",
-    "pink": "#ff4fab",
-    "gold": "#f5c542",
+    "pink": "#c99b45",
+    "gold": "#c99b45",
+    "gold2": "#d8b15f",
+    "gold_dark": "#8f6a2e",
     "black": "#050505",
 }
 
@@ -315,9 +317,9 @@ class FileOrganiserApp(tk.Tk):
                         font=FONT_BODY)
         style.configure("Treeview.Heading", background=C["card2"], foreground=C["gold"],
                         font=FONT_HEAD, relief="flat")
-        style.map("Treeview", background=[("selected", "#3d2031")],
+        style.map("Treeview", background=[("selected", "#332819")],
                   foreground=[("selected", C["white"])])
-        style.configure("Horizontal.TProgressbar", background=C["pink"],
+        style.configure("Horizontal.TProgressbar", background=C["gold2"],
                         troughcolor=C["surface"], bordercolor=C["border"])
 
     def _panel(self, parent, **grid):
@@ -327,12 +329,16 @@ class FileOrganiserApp(tk.Tk):
         return frame
 
     def _button(self, parent, text, command, fg=None):
-        button = tk.Button(parent, text=text, command=command, bg=C["card2"],
-                           fg=fg or C["text"], activebackground="#33202a",
-                           activeforeground=C["white"], relief="flat", bd=0,
+        filled = fg in (C["gold"], C["gold2"], C["amber"], C["green"])
+        bg = C["gold"] if filled else C["card2"]
+        text_color = C["black"] if filled else (fg or C["text"])
+        hover_bg = C["gold2"] if filled else "#3a2d1b"
+        button = tk.Button(parent, text=text, command=command, bg=bg,
+                           fg=text_color, activebackground=hover_bg,
+                           activeforeground=C["black"] if filled else C["white"], relief="flat", bd=0,
                            padx=16, pady=10, font=FONT_HEAD, cursor="hand2")
-        button.bind("<Enter>", lambda _event: button.configure(bg="#33202a"))
-        button.bind("<Leave>", lambda _event: button.configure(bg=C["card2"]))
+        button.bind("<Enter>", lambda _event: button.configure(bg=hover_bg))
+        button.bind("<Leave>", lambda _event: button.configure(bg=bg))
         return button
 
     def _entry(self, parent, variable):
@@ -356,7 +362,7 @@ class FileOrganiserApp(tk.Tk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(4, weight=1)
 
-        accent_bar = tk.Frame(self, bg=C["pink"], height=5)
+        accent_bar = tk.Frame(self, bg=C["gold_dark"], height=4)
         accent_bar.grid(row=0, column=0, sticky="ew")
 
         header = tk.Frame(self, bg=C["bg2"], highlightbackground=C["border"],
@@ -365,9 +371,9 @@ class FileOrganiserApp(tk.Tk):
         header.grid_columnconfigure(0, weight=1)
         header.grid_columnconfigure(1, weight=0)
 
-        tk.Label(header, text="FILE ORGANISER", bg=C["bg2"], fg=C["gold"],
+        tk.Label(header, text="FILE ORGANISER", bg=C["bg2"], fg=C["text"],
                  font=FONT_TITLE).grid(row=0, column=0, sticky="w", padx=18, pady=(16, 0))
-        tk.Frame(header, bg=C["pink"], height=2).grid(
+        tk.Frame(header, bg=C["gold"], height=2).grid(
             row=2, column=0, sticky="ew", padx=20, pady=(0, 14))
         tk.Label(header, text=f"{APP_NAME} v{APP_VERSION}  |  Offline desktop cleanup agent",
                  bg=C["bg2"], fg=C["muted2"], font=FONT_SUBTITLE).grid(
@@ -384,9 +390,9 @@ class FileOrganiserApp(tk.Tk):
         stats.grid_columnconfigure(0, weight=1)
         stats.grid_columnconfigure(1, weight=1)
         stats.grid_columnconfigure(2, weight=1)
-        self._stat_card(stats, "PLANNED MOVES", self.count_var, C["pink"], 0)
-        self._stat_card(stats, "TARGET FOLDERS", self.folder_var, C["gold"], 1)
-        self._stat_card(stats, "SAFETY STATE", self.safety_var, C["pink"], 2)
+        self._stat_card(stats, "PLANNED MOVES", self.count_var, C["gold"], 0)
+        self._stat_card(stats, "TARGET FOLDERS", self.folder_var, C["gold2"], 1)
+        self._stat_card(stats, "SAFETY STATE", self.safety_var, C["gold"], 2)
 
         controls = self._panel(self, row=3, column=0, sticky="ew", padx=24, pady=(0, 14))
         controls.grid_columnconfigure(1, weight=1)
@@ -441,7 +447,7 @@ class FileOrganiserApp(tk.Tk):
         action_row.grid_columnconfigure(1, weight=1)
         self._button(action_row, "Preview", self.preview, C["cyan"]).grid(
             row=0, column=0, sticky="ew", padx=(0, 8))
-        self.sort_button = self._button(action_row, "Sort Files", self.sort_files, C["pink"])
+        self.sort_button = self._button(action_row, "Sort Files", self.sort_files, C["gold2"])
         self.sort_button.grid(row=0, column=1, sticky="ew")
 
         right = self._panel(main, row=0, column=1, sticky="nsew")

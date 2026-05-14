@@ -12,6 +12,17 @@ One standalone offline agent with one job: organise files from a chosen folder i
 - Writes an undo log to `_organiser_logs`.
 - Can undo the last sort from the saved manifest.
 
+## Windows SmartScreen note
+
+This first release is unsigned. Windows may show "Windows protected your PC" because the app does not have a paid code-signing certificate yet.
+
+To run it:
+
+1. Click **More info**.
+2. Click **Run anyway**.
+
+The app works fully offline, only moves files into folders, never deletes files, and never overwrites existing files.
+
 ## Instruction examples
 
 ```text

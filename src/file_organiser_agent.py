@@ -40,13 +40,13 @@ C = {
     "black": "#050505",
 }
 
-FONT_TITLE = ("Courier", 34, "bold")
-FONT_SUBTITLE = ("Courier", 11)
-FONT_HEAD = ("Courier", 13, "bold")
-FONT_BODY = ("Courier", 10)
-FONT_SMALL = ("Courier", 9)
-FONT_MONO = ("Courier", 10)
-FONT_STAT = ("Courier", 18, "bold")
+FONT_TITLE = ("Segoe UI Semibold", 34)
+FONT_SUBTITLE = ("Segoe UI", 11)
+FONT_HEAD = ("Segoe UI Semibold", 12)
+FONT_BODY = ("Segoe UI", 10)
+FONT_SMALL = ("Segoe UI", 9)
+FONT_MONO = ("Consolas", 10)
+FONT_STAT = ("Segoe UI Semibold", 18)
 
 
 CATEGORY_RULES = {
@@ -104,9 +104,20 @@ PROTECTED_NAMES = {
 }
 
 DEFAULT_INSTRUCTIONS = (
-    "Sort my desktop into clear folders by file type. Keep screenshots together. "
-    "Put invoices, receipts, and tax files into Finance. Put resumes and job files "
-    "into Career. Do not delete anything."
+    "Mission: organise this folder into a clean, easy-to-scan file system.\n\n"
+    "Safety rules:\n"
+    "- Move files only. Never delete anything.\n"
+    "- Never overwrite an existing file.\n"
+    "- Leave folders alone unless I choose them directly.\n\n"
+    "Default sorting:\n"
+    "- Screenshots and screen recordings -> Screenshots\n"
+    "- Invoices, receipts, tax, bank, and payment files -> Finance\n"
+    "- Resumes, CVs, job applications, and portfolio files -> Career\n"
+    "- Photos, logos, and image assets -> Images\n"
+    "- Installers and setup files -> Installers\n"
+    "- Zip, rar, and backup bundles -> Archives\n\n"
+    "Custom folders: Finance, Career, Screenshots, Images, Documents, Installers, Archives, Code, Other\n"
+    "Ignore: shortcuts, desktop.ini, temporary files"
 )
 
 
@@ -157,6 +168,12 @@ def parse_instruction_profile(instructions):
             left, right = line.split("->", 1)
             folder = safe_folder_name(right)
             words = tokenize(left)
+            if folder and words:
+                custom.setdefault(folder, set()).update(words)
+        elif ":" in line and not line.lower().strip().startswith(("mission", "safety", "default", "custom", "ignore")):
+            left, right = line.split(":", 1)
+            folder = safe_folder_name(left)
+            words = tokenize(right)
             if folder and words:
                 custom.setdefault(folder, set()).update(words)
 
@@ -336,7 +353,7 @@ class FileOrganiserApp(tk.Tk):
         button = tk.Button(parent, text=text, command=command, bg=bg,
                            fg=text_color, activebackground=hover_bg,
                            activeforeground=C["black"] if filled else C["white"], relief="flat", bd=0,
-                           padx=16, pady=10, font=FONT_HEAD, cursor="hand2")
+                           padx=18, pady=10, font=FONT_HEAD, cursor="hand2")
         button.bind("<Enter>", lambda _event: button.configure(bg=hover_bg))
         button.bind("<Leave>", lambda _event: button.configure(bg=bg))
         return button
@@ -371,7 +388,7 @@ class FileOrganiserApp(tk.Tk):
         header.grid_columnconfigure(0, weight=1)
         header.grid_columnconfigure(1, weight=0)
 
-        tk.Label(header, text="FILE ORGANISER", bg=C["bg2"], fg=C["text"],
+        tk.Label(header, text="File Organiser Agent", bg=C["bg2"], fg=C["text"],
                  font=FONT_TITLE).grid(row=0, column=0, sticky="w", padx=18, pady=(16, 0))
         tk.Frame(header, bg=C["gold"], height=2).grid(
             row=2, column=0, sticky="ew", padx=20, pady=(0, 14))
@@ -381,7 +398,7 @@ class FileOrganiserApp(tk.Tk):
         badge_wrap = tk.Frame(header, bg=C["bg2"])
         badge_wrap.grid(row=0, column=1, rowspan=3, sticky="e", padx=18)
         tk.Label(badge_wrap, text="MOVE ONLY", bg=C["gold"], fg=C["black"],
-                 font=("Courier", 16, "bold"), padx=16, pady=8).grid(row=0, column=0, sticky="e")
+                 font=("Segoe UI Semibold", 15), padx=16, pady=8).grid(row=0, column=0, sticky="e")
         tk.Label(badge_wrap, text="Never deletes. Never overwrites.",
                  bg=C["bg2"], fg=C["muted2"], font=FONT_SMALL).grid(row=1, column=0, sticky="e", pady=(8, 0))
 
@@ -390,22 +407,22 @@ class FileOrganiserApp(tk.Tk):
         stats.grid_columnconfigure(0, weight=1)
         stats.grid_columnconfigure(1, weight=1)
         stats.grid_columnconfigure(2, weight=1)
-        self._stat_card(stats, "PLANNED MOVES", self.count_var, C["gold"], 0)
-        self._stat_card(stats, "TARGET FOLDERS", self.folder_var, C["gold2"], 1)
-        self._stat_card(stats, "SAFETY STATE", self.safety_var, C["gold"], 2)
+        self._stat_card(stats, "Planned Moves", self.count_var, C["gold"], 0)
+        self._stat_card(stats, "Target Folders", self.folder_var, C["gold2"], 1)
+        self._stat_card(stats, "Safety State", self.safety_var, C["gold"], 2)
 
         controls = self._panel(self, row=3, column=0, sticky="ew", padx=24, pady=(0, 14))
         controls.grid_columnconfigure(1, weight=1)
         controls.grid_columnconfigure(3, weight=1)
 
-        tk.Label(controls, text="SOURCE", bg=C["surface"], fg=C["gold"],
+        tk.Label(controls, text="Source folder", bg=C["surface"], fg=C["gold"],
                  font=FONT_SMALL).grid(row=0, column=0, sticky="w", padx=14, pady=(14, 3))
         self._entry(controls, self.source_var).grid(
                      row=1, column=0, columnspan=2, sticky="ew", padx=(14, 8), pady=(0, 12), ipady=8)
         self._button(controls, "Browse", self.pick_source).grid(
             row=1, column=2, sticky="ew", padx=(0, 14), pady=(0, 12))
 
-        tk.Label(controls, text="SORT INTO", bg=C["surface"], fg=C["gold"],
+        tk.Label(controls, text="Organised files destination", bg=C["surface"], fg=C["gold"],
                  font=FONT_SMALL).grid(row=0, column=3, sticky="w", padx=14, pady=(14, 3))
         self._entry(controls, self.dest_var).grid(
                      row=1, column=3, sticky="ew", padx=(14, 8), pady=(0, 12), ipady=8)
@@ -420,7 +437,7 @@ class FileOrganiserApp(tk.Tk):
 
         left = self._panel(main, row=0, column=0, sticky="ns", padx=(0, 14), pady=0)
         left.grid_rowconfigure(1, weight=1)
-        tk.Label(left, text="SORTING RULES", bg=C["surface"], fg=C["gold"],
+        tk.Label(left, text="Agent Instructions", bg=C["surface"], fg=C["gold"],
                  font=FONT_HEAD).grid(row=0, column=0, sticky="w", padx=14, pady=(14, 8))
         self.instructions = tk.Text(left, width=38, height=16, bg=C["bg"], fg=C["text"],
                                     insertbackground=C["cyan"], relief="flat",
@@ -431,11 +448,12 @@ class FileOrganiserApp(tk.Tk):
         self.instructions.insert("1.0", DEFAULT_INSTRUCTIONS)
 
         help_text = (
-            "Examples:\n"
+            "Rule patterns the agent understands:\n"
+            "Finance, tax, receipts -> Finance\n"
+            "client alpha project files -> Client Alpha\n"
             "folders: Finance, Photos, Work\n"
-            "invoices receipts tax -> Finance\n"
-            "ignore: shortcuts temp\n"
-            "Sort by date/month/project/type"
+            "ignore: shortcuts temp drafts\n"
+            "Sort by type, month, date, or project"
         )
         tk.Label(left, text=help_text, bg=C["surface"], fg=C["muted"],
                  justify="left", font=FONT_SMALL).grid(row=2, column=0, sticky="w",
@@ -457,9 +475,9 @@ class FileOrganiserApp(tk.Tk):
         plan_header = tk.Frame(right, bg=C["surface"])
         plan_header.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
         plan_header.grid_columnconfigure(0, weight=1)
-        tk.Label(plan_header, text="PREVIEW PLAN", bg=C["surface"], fg=C["gold"],
+        tk.Label(plan_header, text="Preview Plan", bg=C["surface"], fg=C["gold"],
                  font=FONT_HEAD).grid(row=0, column=0, sticky="w")
-        tk.Label(plan_header, text="preview first, then move", bg=C["surface"],
+        tk.Label(plan_header, text="nothing moves until you confirm", bg=C["surface"],
                  fg=C["muted"], font=FONT_SMALL).grid(row=0, column=1, sticky="e")
 
         cols = ("file", "category", "target", "reason", "status")

@@ -386,6 +386,58 @@ def unique_target(target):
         counter += 1
 
 
+def relative_or_absolute(path, root):
+    path = Path(path)
+    root = Path(root)
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def write_index(index_root, moves):
+    index_root = Path(index_root)
+    index_root.mkdir(parents=True, exist_ok=True)
+    index_path = index_root / "ORGANISER_INDEX.md"
+    grouped = defaultdict(list)
+    duplicates = defaultdict(list)
+    for move in moves:
+        grouped[move.get("category", "Other")].append(move)
+        if move.get("duplicate_group"):
+            duplicates[move["duplicate_group"]].append(move)
+
+    lines = [
+        "# Organiser Index",
+        "",
+        f"Generated: {datetime.now().isoformat(timespec='seconds')}",
+        "",
+        "This index is a map of what the organiser moved. It does not delete anything.",
+        "",
+    ]
+    if duplicates:
+        lines.extend(["## Duplicate Flags", ""])
+        for label in sorted(duplicates):
+            lines.append(f"### {label}")
+            for move in duplicates[label]:
+                lines.append(f"- {relative_or_absolute(move.get('target', ''), index_root)}")
+            lines.append("")
+
+    lines.extend(["## Moved Items", ""])
+    for category in sorted(grouped):
+        lines.append(f"### {category}")
+        for move in sorted(grouped[category], key=lambda item: item.get("target", "").lower()):
+            item_type = move.get("item_type", "file")
+            target = relative_or_absolute(move.get("target", ""), index_root)
+            source = relative_or_absolute(move.get("source", ""), index_root)
+            status = move.get("status", "")
+            duplicate = f" [{move['duplicate_group']}]" if move.get("duplicate_group") else ""
+            lines.append(f"- {item_type}: {target}{duplicate} - from {source} - {status}")
+        lines.append("")
+
+    index_path.write_text("\n".join(lines), encoding="utf-8")
+    return index_path
+
+
 def is_relative_to(path, parent):
     try:
         path.resolve().relative_to(parent.resolve())
@@ -891,7 +943,9 @@ class FileOrganiserApp(tk.Tk):
             "moves": moved,
         }
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        self.after(0, self._sort_done, len(moved), manifest_path)
+        index_root = Path(self.source_var.get()) if self.include_subfolder_files_var.get() else Path(self.dest_var.get())
+        index_path = write_index(index_root, moved)
+        self.after(0, self._sort_done, len(moved), manifest_path, index_path)
 
     def _worker_progress(self, idx, total):
         self.progress["maximum"] = total
@@ -900,12 +954,15 @@ class FileOrganiserApp(tk.Tk):
         self.update_stats()
         self.status_var.set(f"Sorting files: {idx}/{total}")
 
-    def _sort_done(self, moved_count, manifest_path):
+    def _sort_done(self, moved_count, manifest_path, index_path):
         self.sort_button.configure(state="normal")
         self.render_plan()
         self.update_stats()
-        self.status_var.set(f"Done. Moved {moved_count} item(s). Undo log: {manifest_path}")
-        messagebox.showinfo(APP_NAME, f"Sorting complete.\n\nMoved {moved_count} item(s).\n\nUndo log saved at:\n{manifest_path}")
+        self.status_var.set(f"Done. Moved {moved_count} item(s). Index: {index_path}")
+        messagebox.showinfo(
+            APP_NAME,
+            f"Sorting complete.\n\nMoved {moved_count} item(s).\n\nIndex saved at:\n{index_path}\n\nUndo log saved at:\n{manifest_path}",
+        )
 
     def undo_last_sort(self):
         manifest = self.last_manifest

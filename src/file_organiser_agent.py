@@ -127,7 +127,8 @@ DEFAULT_INSTRUCTIONS = (
     "- Leave folders alone unless I choose them directly.\n\n"
     "Course library rule:\n"
     "- For course folders, keep each course folder where it is.\n"
-    "- Sort the files inside each course folder into local folders like Documents, Images, Videos, Archives, Code, and Other.\n"
+    "- Recursively sort files inside every subfolder, even subfolders inside subfolders.\n"
+    "- Put each file into a local folder beside where it already lives, like Documents, Images, Videos, Archives, Code, Prompts, GPTs, and Other.\n"
     "- Do not pull course files into one big shared destination.\n\n"
     "Default sorting:\n"
     "- Screenshots and screen recordings -> Screenshots\n"
@@ -725,7 +726,7 @@ class FileOrganiserApp(tk.Tk):
             "folders: Finance, Photos, Work\n"
             "ignore: shortcuts temp drafts\n"
             "Sort by type, month, date, or project\n"
-            "For course libraries, sort inside subfolders."
+            "For course libraries, use recursive in-place sorting."
         )
         tk.Label(left, text=help_text, bg=C["surface"], fg=C["muted"],
                  justify="left", font=FONT_SMALL).grid(row=2, column=0, sticky="w",
@@ -751,7 +752,7 @@ class FileOrganiserApp(tk.Tk):
         folder_toggle.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
         nested_toggle = tk.Checkbutton(
             action_row,
-            text="Sort files inside subfolders in place",
+            text="Recursively sort files inside ALL subfolders in place",
             variable=self.include_subfolder_files_var,
             bg=C["surface"],
             fg=C["muted2"],
@@ -850,7 +851,7 @@ class FileOrganiserApp(tk.Tk):
                 APP_NAME,
                 "Choose one folder mode at a time.\n\n"
                 "Use 'Include top-level folders' to move whole folders.\n"
-                "Use 'Sort files inside subfolders in place' to keep folders where they are and organise their contents.",
+                "Use 'Recursively sort files inside ALL subfolders in place' to keep folders where they are and organise every nested folder.",
             )
             return
         try:
@@ -870,8 +871,9 @@ class FileOrganiserApp(tk.Tk):
         files = sum(1 for plan in self.plans if plan.item_type == "file")
         folders = sum(1 for plan in self.plans if plan.item_type == "folder")
         duplicate_groups = {plan.duplicate_group for plan in self.plans if plan.duplicate_group}
+        scan_label = "recursive preview" if self.include_subfolder_files_var.get() else "preview"
         self.status_var.set(
-            f"Preview ready: {files} file(s), {folders} folder(s), {len(duplicate_groups)} duplicate group(s). Nothing has changed yet."
+            f"{scan_label.title()} ready: {files} file(s), {folders} folder(s), {len(duplicate_groups)} duplicate group(s). Nothing has changed yet."
         )
 
     def render_plan(self):

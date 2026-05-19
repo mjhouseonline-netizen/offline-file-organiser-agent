@@ -575,8 +575,8 @@ class FileOrganiserApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_NAME} {APP_VERSION}")
-        self.geometry("1160x760")
-        self.minsize(980, 660)
+        self.geometry("1180x820")
+        self.minsize(960, 620)
         self.configure(bg=C["bg"])
         self.plans = []
         self.last_manifest = None
@@ -648,12 +648,36 @@ class FileOrganiserApp(tk.Tk):
 
     def _build_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(4, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        accent_bar = tk.Frame(self, bg=C["gold_dark"], height=4)
+        canvas = tk.Canvas(self, bg=C["bg"], highlightthickness=0, borderwidth=0)
+        page_scroll = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=page_scroll.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        page_scroll.grid(row=0, column=1, sticky="ns")
+
+        page = tk.Frame(canvas, bg=C["bg"])
+        page_window = canvas.create_window((0, 0), window=page, anchor="nw")
+
+        def refresh_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def sync_page_width(event):
+            canvas.itemconfigure(page_window, width=event.width)
+
+        page.bind("<Configure>", refresh_scrollregion)
+        canvas.bind("<Configure>", sync_page_width)
+        canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
+        canvas.bind_all("<Button-4>", lambda _event: canvas.yview_scroll(-1, "units"))
+        canvas.bind_all("<Button-5>", lambda _event: canvas.yview_scroll(1, "units"))
+
+        page.grid_columnconfigure(0, weight=1)
+        page.grid_rowconfigure(4, weight=1)
+
+        accent_bar = tk.Frame(page, bg=C["gold_dark"], height=4)
         accent_bar.grid(row=0, column=0, sticky="ew")
 
-        header = tk.Frame(self, bg=C["bg2"], highlightbackground=C["border"],
+        header = tk.Frame(page, bg=C["bg2"], highlightbackground=C["border"],
                           highlightthickness=1)
         header.grid(row=1, column=0, sticky="ew", padx=24, pady=(18, 14))
         header.grid_columnconfigure(0, weight=1)
@@ -673,7 +697,7 @@ class FileOrganiserApp(tk.Tk):
         tk.Label(badge_wrap, text="Never deletes. Never overwrites.",
                  bg=C["bg2"], fg=C["muted2"], font=FONT_SMALL).grid(row=1, column=0, sticky="e", pady=(8, 0))
 
-        stats = tk.Frame(self, bg=C["bg"])
+        stats = tk.Frame(page, bg=C["bg"])
         stats.grid(row=2, column=0, sticky="ew", padx=24, pady=(0, 14))
         stats.grid_columnconfigure(0, weight=1)
         stats.grid_columnconfigure(1, weight=1)
@@ -684,7 +708,7 @@ class FileOrganiserApp(tk.Tk):
         self._stat_card(stats, "Duplicates", self.duplicate_var, C["gold"], 2)
         self._stat_card(stats, "Safety State", self.safety_var, C["gold2"], 3)
 
-        controls = self._panel(self, row=3, column=0, sticky="ew", padx=24, pady=(0, 14))
+        controls = self._panel(page, row=3, column=0, sticky="ew", padx=24, pady=(0, 14))
         controls.grid_columnconfigure(1, weight=1)
         controls.grid_columnconfigure(3, weight=1)
 
@@ -702,7 +726,7 @@ class FileOrganiserApp(tk.Tk):
         self._button(controls, "Browse", self.pick_dest).grid(
             row=1, column=4, sticky="ew", padx=(0, 14), pady=(0, 12))
 
-        main = tk.Frame(self, bg=C["bg"])
+        main = tk.Frame(page, bg=C["bg"])
         main.grid(row=4, column=0, sticky="nsew", padx=24)
         main.grid_columnconfigure(0, weight=0)
         main.grid_columnconfigure(1, weight=1)
@@ -712,7 +736,7 @@ class FileOrganiserApp(tk.Tk):
         left.grid_rowconfigure(1, weight=1)
         tk.Label(left, text="Agent Instructions", bg=C["surface"], fg=C["gold"],
                  font=FONT_HEAD).grid(row=0, column=0, sticky="w", padx=14, pady=(14, 8))
-        self.instructions = tk.Text(left, width=38, height=16, bg=C["bg"], fg=C["text"],
+        self.instructions = tk.Text(left, width=38, height=13, bg=C["bg"], fg=C["text"],
                                     insertbackground=C["cyan"], relief="flat",
                                     wrap="word", font=FONT_BODY, padx=12, pady=12,
                                     highlightbackground=C["border"], highlightcolor=C["cyan"],
@@ -809,7 +833,7 @@ class FileOrganiserApp(tk.Tk):
         self.tree.configure(yscrollcommand=scroll.set)
         scroll.grid(row=1, column=1, sticky="ns", pady=(0, 14))
 
-        footer = tk.Frame(self, bg=C["bg"])
+        footer = tk.Frame(page, bg=C["bg"])
         footer.grid(row=5, column=0, sticky="ew", padx=24, pady=18)
         footer.grid_columnconfigure(0, weight=1)
 

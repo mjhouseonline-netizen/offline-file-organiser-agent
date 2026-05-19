@@ -488,7 +488,10 @@ def already_inside_category(path, source_dir, category):
     for parent in path.parents:
         if parent == source_dir:
             break
-        if safe_folder_name(parent.name).lower() == category_name:
+        parent_name = safe_folder_name(parent.name).lower()
+        if parent_name == category_name:
+            return True
+        if parent_name in {safe_folder_name(name).lower() for name in CATEGORY_RULES}:
             return True
     return False
 
@@ -726,7 +729,8 @@ class FileOrganiserApp(tk.Tk):
             "folders: Finance, Photos, Work\n"
             "ignore: shortcuts temp drafts\n"
             "Sort by type, month, date, or project\n"
-            "For course libraries, use recursive in-place sorting."
+            "For course libraries, use recursive in-place sorting.\n"
+            "Do not use whole-folder mode unless you only want folders moved."
         )
         tk.Label(left, text=help_text, bg=C["surface"], fg=C["muted"],
                  justify="left", font=FONT_SMALL).grid(row=2, column=0, sticky="w",
@@ -738,7 +742,7 @@ class FileOrganiserApp(tk.Tk):
         action_row.grid_columnconfigure(1, weight=1)
         folder_toggle = tk.Checkbutton(
             action_row,
-            text="Include top-level folders",
+            text="Move whole top-level folders only (advanced)",
             variable=self.include_folders_var,
             bg=C["surface"],
             fg=C["muted2"],
@@ -752,7 +756,7 @@ class FileOrganiserApp(tk.Tk):
         folder_toggle.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
         nested_toggle = tk.Checkbutton(
             action_row,
-            text="Recursively sort files inside ALL subfolders in place",
+            text="Recommended: recursively sort files inside ALL subfolders",
             variable=self.include_subfolder_files_var,
             bg=C["surface"],
             fg=C["muted2"],
@@ -850,10 +854,19 @@ class FileOrganiserApp(tk.Tk):
             messagebox.showinfo(
                 APP_NAME,
                 "Choose one folder mode at a time.\n\n"
-                "Use 'Include top-level folders' to move whole folders.\n"
+                "Use 'Move whole top-level folders only' to move folders without sorting their contents.\n"
                 "Use 'Recursively sort files inside ALL subfolders in place' to keep folders where they are and organise every nested folder.",
             )
             return
+        if self.include_folders_var.get():
+            proceed = messagebox.askyesno(
+                APP_NAME,
+                "Whole-folder mode does not sort files inside folders.\n\n"
+                "It only moves top-level folders as complete folders. For Skool courses, cancel this and use recursive subfolder sorting instead.\n\n"
+                "Continue with whole-folder mode?",
+            )
+            if not proceed:
+                return
         try:
             self.plans = build_plan(
                 self.source_var.get(),

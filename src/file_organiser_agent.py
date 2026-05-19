@@ -14,6 +14,7 @@ from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "Offline File Organiser Agent"
 APP_VERSION = "1.1"
+MAX_IN_PLACE_DEPTH = 2
 
 
 C = {
@@ -127,8 +128,8 @@ DEFAULT_INSTRUCTIONS = (
     "- Leave folders alone unless I choose them directly.\n\n"
     "Course library rule:\n"
     "- For course folders, keep each course folder where it is.\n"
-    "- Recursively sort files inside every subfolder, even subfolders inside subfolders.\n"
-    "- Put each file into a local folder beside where it already lives, like Documents, Images, Videos, Archives, Code, Prompts, GPTs, and Other.\n"
+    "- Recursively scan every subfolder, even subfolders inside subfolders.\n"
+    "- Keep the structure to 2 subfolder levels max, then sort into folders like Documents, Images, Videos, Archives, Code, Prompts, GPTs, and Other.\n"
     "- Do not pull course files into one big shared destination.\n\n"
     "Default sorting:\n"
     "- Screenshots and screen recordings -> Screenshots\n"
@@ -496,6 +497,18 @@ def already_inside_category(path, source_dir, category):
     return False
 
 
+def capped_in_place_base(path, source_dir):
+    try:
+        rel_parent = path.parent.resolve().relative_to(source_dir.resolve())
+    except ValueError:
+        return path.parent
+    parts = rel_parent.parts[:MAX_IN_PLACE_DEPTH]
+    base = source_dir
+    for part in parts:
+        base = base / part
+    return base
+
+
 def add_nested_file_plans(source_dir, dest_dir, mode, custom_categories, ignored, plans):
     for path in sorted(source_dir.rglob("*"), key=lambda p: str(p).lower()):
         if not path.is_file():
@@ -516,7 +529,8 @@ def add_nested_file_plans(source_dir, dest_dir, mode, custom_categories, ignored
         if already_inside_category(path, source_dir, category):
             continue
 
-        target = unique_target(path.parent / category / path.name)
+        target_base = capped_in_place_base(path, source_dir)
+        target = unique_target(target_base / category / path.name)
         if path.resolve() == target.resolve():
             continue
         plans.append(
@@ -524,7 +538,7 @@ def add_nested_file_plans(source_dir, dest_dir, mode, custom_categories, ignored
                 str(path),
                 str(target),
                 category,
-                f"{reason}; kept inside existing subfolder",
+                f"{reason}; capped at {MAX_IN_PLACE_DEPTH} subfolder levels",
                 "file",
             )
         )
@@ -780,7 +794,7 @@ class FileOrganiserApp(tk.Tk):
         folder_toggle.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
         nested_toggle = tk.Checkbutton(
             action_row,
-            text="Recommended: recursively sort files inside ALL subfolders",
+            text="Recommended: recursive scan, organise to 2 folder levels max",
             variable=self.include_subfolder_files_var,
             bg=C["surface"],
             fg=C["muted2"],
@@ -879,7 +893,7 @@ class FileOrganiserApp(tk.Tk):
                 APP_NAME,
                 "Choose one folder mode at a time.\n\n"
                 "Use 'Move whole top-level folders only' to move folders without sorting their contents.\n"
-                "Use 'Recursively sort files inside ALL subfolders in place' to keep folders where they are and organise every nested folder.",
+                "Use 'recursive scan, organise to 2 folder levels max' to scan every nested folder without creating endless folder chains.",
             )
             return
         if self.include_folders_var.get():
